@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>天宫空间站位置</title>
+		<link rel="stylesheet" href="popup.css" />
+		<link rel="stylesheet" href="leaflet.css" />
+	</head>
+	<body>
+		<div class="container">
+			<div class="header">
+				<h1>🛰️ 天宫空间站</h1>
+				<div class="status" id="status">获取数据中...</div>
+			</div>
+
+			<!-- 选项卡导航 -->
+			<div class="tabs">
+				<button class="tab-button active" id="dataTab">📊 数据</button>
+				<button class="tab-button" id="mapTab">🗺️ 地图</button>
+			</div>
+
+			<!-- 数据视图 -->
+			<div class="tab-content active" id="dataView">
+				<div class="info-section">
+					<div class="info-item">
+						<label>经度:</label>
+						<span id="longitude">--</span>°
+					</div>
+					<div class="info-item">
+						<label>纬度:</label>
+						<span id="latitude">--</span>°
+					</div>
+					<div class="info-item">
+						<label>高度:</label>
+						<span id="altitude">--</span> km
+					</div>
+					<div class="info-item">
+						<label>速度:</label>
+						<span id="velocity">--</span> km/s
+					</div>
+				</div>
+
+				<div class="time-section">
+					<div class="info-item">
+						<label>UTC时间:</label>
+						<span id="utcTime">--</span>
+					</div>
+					<div class="info-item">
+						<label>本地时间:</label>
+						<span id="localTime">--</span>
+					</div>
+				</div>
+
+				<div class="tle-section">
+					<h3>TLE数据</h3>
+					<div class="tle-info">
+						<div>轨道周期: <span id="period">--</span> 分钟</div>
+						<div>倾角: <span id="inclination">--</span>°</div>
+						<div>偏心率: <span id="eccentricity">--</span></div>
+						<div class="tle-update-time">
+							<small
+								>TLE更新:
+								<span id="tleUpdateTime">--</span></small
+							>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- 地图视图 -->
+			<div class="tab-content" id="mapView">
+				<div id="map"></div>
+				<div class="map-info">
+					<div class="location-display">
+						<span id="mapLongitude">--</span>°,
+						<span id="mapLatitude">--</span>°
+					</div>
+					<div class="speed-display">
+						速度: <span id="mapVelocity">--</span> km/s
+					</div>
+				</div>
+			</div>
+
+			<div class="controls">
+				<button id="refreshBtn">🔄 刷新数据</button>
+			</div>
+
+			<div class="footer">
+				<small>数据来源: CELESTRAK</small>
+			</div>
+		</div>
+
+		<script src="leaflet.js"></script>
+		<script src="satellite.min.js"></script>
+		<script src="popup.js"></script>
+	</body>
+</html>

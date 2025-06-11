@@ -1,0 +1,287 @@
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+		"Helvetica Neue", Arial, sans-serif;
+	background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+	margin: 0;
+	padding: 0;
+	overflow-x: hidden;
+}
+
+.container {
+	width: 400px;
+	height: 600px;
+	background: rgba(255, 255, 255, 0.95);
+	backdrop-filter: blur(10px);
+	border-radius: 15px;
+	padding: 20px;
+	box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.header {
+	text-align: center;
+	margin-bottom: 20px;
+}
+
+.header h1 {
+	margin: 0 0 10px 0;
+	font-size: 1.5rem;
+	color: #333;
+	font-weight: 600;
+}
+
+.status {
+	padding: 8px 16px;
+	border-radius: 20px;
+	font-size: 0.85rem;
+	font-weight: 500;
+	transition: all 0.3s ease;
+}
+
+.status.loading {
+	background: #fef3c7;
+	color: #d97706;
+}
+
+.status.online {
+	background: #d1fae5;
+	color: #059669;
+}
+
+.status.error {
+	background: #fee2e2;
+	color: #dc2626;
+}
+
+/* 选项卡样式 */
+.tabs {
+	display: flex;
+	background: rgba(255, 255, 255, 0.5);
+	border-radius: 12px;
+	padding: 4px;
+	margin-bottom: 15px;
+}
+
+.tab-button {
+	flex: 1;
+	padding: 8px 12px;
+	border: none;
+	background: transparent;
+	border-radius: 8px;
+	cursor: pointer;
+	font-size: 0.9rem;
+	font-weight: 500;
+	color: #666;
+	transition: all 0.3s ease;
+}
+
+.tab-button.active {
+	background: white;
+	color: #333;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.tab-button:hover:not(.active) {
+	background: rgba(255, 255, 255, 0.3);
+}
+
+/* 选项卡内容 */
+.tab-content {
+	display: none;
+	flex: 1;
+	overflow-y: auto;
+}
+
+.tab-content.active {
+	display: block;
+}
+
+.info-section {
+	background: rgba(255, 255, 255, 0.6);
+	border-radius: 12px;
+	padding: 15px;
+	margin-bottom: 15px;
+	border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.time-section {
+	background: rgba(255, 255, 255, 0.6);
+	border-radius: 12px;
+	padding: 15px;
+	margin-bottom: 15px;
+	border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.tle-section {
+	background: rgba(255, 255, 255, 0.6);
+	border-radius: 12px;
+	padding: 15px;
+	margin-bottom: 15px;
+	border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.tle-section h3 {
+	margin: 0 0 10px 0;
+	font-size: 1rem;
+	color: #333;
+	font-weight: 600;
+}
+
+.info-item {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 8px 0;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.info-item:last-child {
+	border-bottom: none;
+}
+
+.info-item label {
+	font-weight: 500;
+	color: #555;
+	font-size: 0.9rem;
+}
+
+.info-item span {
+	font-weight: 600;
+	color: #333;
+	font-size: 0.9rem;
+	font-family: "Monaco", "Menlo", "Consolas", monospace;
+}
+
+.tle-info div {
+	padding: 5px 0;
+	font-size: 0.85rem;
+	color: #555;
+}
+
+.tle-info span {
+	font-weight: 600;
+	color: #333;
+	font-family: "Monaco", "Menlo", "Consolas", monospace;
+}
+
+/* 地图样式 */
+#map {
+	height: 350px;
+	width: 100%;
+	border-radius: 12px;
+	margin-bottom: 10px;
+	border: 2px solid rgba(255, 255, 255, 0.3);
+	overflow: hidden;
+}
+
+.map-info {
+	background: rgba(255, 255, 255, 0.6);
+	border-radius: 8px;
+	padding: 10px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	font-size: 0.85rem;
+}
+
+.location-display,
+.speed-display {
+	font-weight: 600;
+	color: #333;
+	font-family: "Monaco", "Menlo", "Consolas", monospace;
+}
+
+.controls {
+	display: flex;
+	justify-content: center;
+	gap: 10px;
+	margin-top: auto;
+	padding-top: 15px;
+}
+
+.controls button {
+	padding: 12px 24px;
+	border: none;
+	border-radius: 10px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	font-size: 0.9rem;
+	min-width: 120px;
+}
+
+#refreshBtn {
+	background: #3b82f6;
+	color: white;
+}
+
+#refreshBtn:hover {
+	background: #2563eb;
+	transform: translateY(-2px);
+}
+
+#toggleAutoUpdate {
+	background: #6b7280;
+	color: white;
+}
+
+#toggleAutoUpdate:hover {
+	background: #4b5563;
+	transform: translateY(-2px);
+}
+
+#toggleAutoUpdate.active {
+	background: #10b981;
+}
+
+#toggleAutoUpdate.active:hover {
+	background: #059669;
+}
+
+.footer {
+	text-align: center;
+	margin-top: 15px;
+	color: #666;
+	font-size: 0.75rem;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+	width: 6px;
+}
+
+::-webkit-scrollbar-track {
+	background: rgba(255, 255, 255, 0.1);
+	border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+	background: rgba(255, 255, 255, 0.3);
+	border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: rgba(255, 255, 255, 0.5);
+}
+
+/* 在文件末尾添加TLE更新时间的样式 */
+.tle-update-time {
+	margin-top: 8px;
+	padding-top: 6px;
+	border-top: 1px solid rgba(0, 0, 0, 0.1);
+	text-align: center;
+}
+
+.tle-update-time small {
+	color: #666;
+	font-size: 11px;
+}
