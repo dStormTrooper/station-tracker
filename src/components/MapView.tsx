@@ -296,50 +296,22 @@ const MapView: React.FC<MapViewProps> = ({ data, tracker }) => {
 	return (
 		<div className="h-full flex flex-col">
 			{/* 地图控制面板 */}
-			<div className="glass-panel p-3 mb-2 flex items-center justify-between">
-				<label className="flex items-center cursor-pointer text-sm group">
-					<div className="relative mr-3">
-						<input
-							type="checkbox"
-							checked={isTracking}
-							onChange={(e) => setIsTracking(e.target.checked)}
-							className="sr-only peer"
-						/>
-						<div className="w-5 h-5 border-2 border-white border-opacity-40 rounded-md bg-white bg-opacity-10 peer-checked:bg-blue-500 peer-checked:border-blue-500 transition-all duration-200 flex items-center justify-center">
-							<svg
-								className={`w-3 h-3 text-white transition-opacity duration-200 ${
-									isTracking ? "opacity-100" : "opacity-0"
-								}`}
-								fill="currentColor"
-								viewBox="0 0 20 20">
-								<path
-									fillRule="evenodd"
-									d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-									clipRule="evenodd"
-								/>
-							</svg>
-						</div>
-					</div>
-					<span className="text-white text-opacity-90 group-hover:text-opacity-100 transition-all duration-200">
-						自动跟踪太空站
-					</span>
+			<div className="glass-panel p-2 mb-2 flex items-center justify-between">
+				<label className="flex items-center cursor-pointer text-sm">
+					<input
+						type="checkbox"
+						checked={isTracking}
+						onChange={(e) => setIsTracking(e.target.checked)}
+						className="mr-2 w-4 h-4"
+					/>
+					<span>自动跟踪太空站</span>
 				</label>
 
 				{!isTracking && (
 					<button
 						onClick={centerOnStation}
-						className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-sm font-medium rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 flex items-center space-x-2">
-						<svg
-							className="w-4 h-4"
-							fill="currentColor"
-							viewBox="0 0 20 20">
-							<path
-								fillRule="evenodd"
-								d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
-								clipRule="evenodd"
-							/>
-						</svg>
-						<span>定位太空站</span>
+						className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition-colors">
+						定位太空站
 					</button>
 				)}
 			</div>
