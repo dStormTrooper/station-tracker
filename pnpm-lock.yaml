@@ -11,8 +11,8 @@ dependencies:
     specifier: ^18.2.0
     version: 18.2.0(react@18.2.0)
   satellite.js:
-    specifier: ^5.0.0
-    version: 5.0.0
+    specifier: ^6.0.0
+    version: 6.0.0
 
 devDependencies:
   '@babel/core':
@@ -1990,8 +1990,8 @@ packages:
     resolution: {integrity: sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ==}
     dev: true
 
-  /satellite.js@5.0.0:
-    resolution: {integrity: sha512-ie3yiJ2LJAJIhVUKdYhgp7V0btXKAMImDjRnuaNfJGl8rjwP2HwVIh4HLFcpiXYEiYwXc5fqh5+yZqCe6KIwWw==}
+  /satellite.js@6.0.0:
+    resolution: {integrity: sha512-A1OTZpIDgzCj1SYJZYs3aISsBuhE0jAZG3n6Pymxq5FFsScNSLIgabu8a1w0Wu56Mf1eoL+pcK4tXgaPNXtdSw==}
     dev: false
 
   /scheduler@0.23.2:

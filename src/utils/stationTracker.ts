@@ -26,30 +26,6 @@ declare global {
 	}
 }
 
-// 自定义错误检查函数
-function isValidPosition(position: any): position is satellite.EciVec3<number> {
-	return (
-		position &&
-		typeof position.x === "number" &&
-		typeof position.y === "number" &&
-		typeof position.z === "number"
-	);
-}
-
-function isValidVelocity(velocity: any): velocity is satellite.EciVec3<number> {
-	return (
-		velocity &&
-		typeof velocity.x === "number" &&
-		typeof velocity.y === "number" &&
-		typeof velocity.z === "number"
-	);
-}
-
-// 弧度转度数函数
-function radiansToDegrees(radians: number): number {
-	return radians * (180 / Math.PI);
-}
-
 export class StationTracker {
 	private stationType: StationType;
 	private autoUpdateInterval: NodeJS.Timeout | null = null;
@@ -66,23 +42,23 @@ export class StationTracker {
 			name: "天宫空间站",
 			apiUrl: "https://celestrak.org/NORAD/elements/gp.php?CATNR=48274&FORMAT=json",
 			fallbackTLE: {
-				OBJECT_NAME: "TIANHE",
+				OBJECT_NAME: "CSS (TIANHE)",
 				OBJECT_ID: "2021-035A",
-				EPOCH: "2024-01-01T00:00:00.000000",
-				MEAN_MOTION: 15.50103472,
-				ECCENTRICITY: 0.0,
-				INCLINATION: 41.462,
-				RA_OF_ASC_NODE: 123.4567,
-				ARG_OF_PERICENTER: 234.5678,
-				MEAN_ANOMALY: 345.6789,
+				EPOCH: "2025-06-11T02:33:23.591520",
+				MEAN_MOTION: 15.58613121,
+				ECCENTRICITY: 0.0004208,
+				INCLINATION: 41.465,
+				RA_OF_ASC_NODE: 57.557,
+				ARG_OF_PERICENTER: 54.3679,
+				MEAN_ANOMALY: 305.755,
 				EPHEMERIS_TYPE: 0,
 				CLASSIFICATION_TYPE: "U",
 				NORAD_CAT_ID: 48274,
 				ELEMENT_SET_NO: 999,
-				REV_AT_EPOCH: 12345,
-				BSTAR: 0.0,
-				MEAN_MOTION_DOT: 0.0,
-				MEAN_MOTION_DDOT: 0.0,
+				REV_AT_EPOCH: 23520,
+				BSTAR: 0.00023814,
+				MEAN_MOTION_DOT: 0.00018506,
+				MEAN_MOTION_DDOT: 0,
 			},
 		},
 		iss: {
@@ -131,12 +107,9 @@ export class StationTracker {
 			if (cachedData) {
 				console.log("使用缓存的TLE数据");
 				this.currentTLE = cachedData.tle;
-				this.satrec = satellite.twoline2satrec(
-					this.generateTLE1(this.currentTLE),
-					this.generateTLE2(this.currentTLE)
-				);
+				this.satrec = (satellite as any).json2satrec(this.currentTLE);
 				this.updateDisplay();
-				this.updateTleTime(cachedData.timestamp);
+				this.updateTleTime(cachedData.timestamp, "缓存");
 
 				const cacheAge = Math.floor(
 					(Date.now() - cachedData.timestamp) / (1000 * 60)
@@ -146,6 +119,7 @@ export class StationTracker {
 					"online"
 				);
 
+				// 数据加载完成后自动启动功能
 				this.startBackgroundUpdates();
 				return;
 			}
@@ -169,13 +143,18 @@ export class StationTracker {
 
 			if (result[`${cacheKey}_tle`] && result[`${cacheKey}_timestamp`]) {
 				const cacheAge = Date.now() - result[`${cacheKey}_timestamp`];
+
+				// 检查缓存是否还有效（6小时内）
 				if (cacheAge < this.cacheExpiryTime) {
 					return {
 						tle: result[`${cacheKey}_tle`] as TLEData,
 						timestamp: result[`${cacheKey}_timestamp`] as number,
 					};
+				} else {
+					console.log("缓存已过期，需要重新获取数据");
 				}
 			}
+
 			return null;
 		} catch (error) {
 			console.error("读取缓存失败:", error);
@@ -197,419 +176,270 @@ export class StationTracker {
 	}
 
 	private async fetchFromNetwork(): Promise<void> {
-		try {
-			console.log(
-				"StationTracker: Attempting to fetch TLE data from multiple sources"
-			);
+		// 尝试多个API端点，但增加请求间隔
+		const apiUrls = [
+			this.currentConfig.apiUrl,
+			"https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=json",
+		];
 
-			// 如果JSON格式失败，尝试JSON格式
-			const response = await fetch(this.currentConfig.apiUrl);
-			if (!response.ok) {
-				throw new Error(`HTTP error! status: ${response.status}`);
+		let data: TLEData[] | null = null;
+		let lastError = null;
+
+		for (let i = 0; i < apiUrls.length; i++) {
+			const apiUrl = apiUrls[i];
+			try {
+				console.log("尝试API:", apiUrl);
+
+				// 为避免被反爬虫，添加随机延迟
+				if (i > 0) {
+					await new Promise((resolve) =>
+						setTimeout(resolve, 2000 + Math.random() * 3000)
+					);
+				}
+
+				const response = await fetch(apiUrl, {
+					method: "GET",
+					headers: {
+						Accept: "application/json",
+						"User-Agent": "Station-Tracker-Extension/1.0",
+						"Cache-Control": "no-cache",
+					},
+				});
+
+				if (!response.ok) {
+					throw new Error(
+						`HTTP ${response.status}: ${response.statusText}`
+					);
+				}
+
+				const responseData = await response.json();
+
+				if (
+					responseData &&
+					Array.isArray(responseData) &&
+					responseData.length > 0
+				) {
+					// 如果是空间站组数据，查找目标空间站
+					const targetCatId =
+						this.currentConfig.fallbackTLE.NORAD_CAT_ID;
+					const stationData = responseData.find(
+						(sat: any) =>
+							sat.OBJECT_NAME &&
+							(sat.NORAD_CAT_ID === targetCatId ||
+								(this.stationType === "css" &&
+									(sat.OBJECT_NAME.includes("CSS") ||
+										sat.OBJECT_NAME.includes("TIANHE"))) ||
+								(this.stationType === "iss" &&
+									sat.OBJECT_NAME.includes("ISS")))
+					);
+					if (stationData) {
+						data = [stationData];
+						break;
+					} else if (responseData[0].NORAD_CAT_ID === targetCatId) {
+						data = responseData;
+						break;
+					}
+				}
+			} catch (error) {
+				console.log(`API ${apiUrl} 失败:`, error);
+				lastError = error;
+				continue;
 			}
-
-			const data = (await response.json()) as TLEData[];
-			if (!Array.isArray(data) || data.length === 0) {
-				throw new Error("Invalid TLE data format");
-			}
-
-			this.currentTLE = data[0];
-			console.log(
-				"StationTracker: Received JSON TLE data:",
-				this.currentTLE
-			);
-
-			await this.saveToCache(this.currentTLE);
-
-			// 直接使用已知正确的TLE格式，基于您的数据更新参数
-			const satId = this.currentTLE.NORAD_CAT_ID;
-			const objectId = this.currentTLE.OBJECT_ID;
-			const tle1 = `1 ${String(satId).padStart(
-				5,
-				"0"
-			)}U ${objectId.padEnd(8, " ")} ${this.formatEpochFromJson(
-				this.currentTLE.EPOCH
-			)}  .${String(
-				Math.floor(this.currentTLE.MEAN_MOTION_DOT * 100000000)
-			).padStart(8, "0")}  00000-0  ${this.formatBstarFromJson(
-				this.currentTLE.BSTAR
-			)} 0  9990`;
-			const tle2 = `2 ${String(satId).padStart(
-				5,
-				"0"
-			)} ${this.currentTLE.INCLINATION.toFixed(4).padStart(
-				8,
-				" "
-			)} ${this.currentTLE.RA_OF_ASC_NODE.toFixed(4).padStart(
-				8,
-				" "
-			)} ${Math.floor(this.currentTLE.ECCENTRICITY * 10000000)
-				.toString()
-				.padStart(7, "0")} ${this.currentTLE.ARG_OF_PERICENTER.toFixed(
-				4
-			).padStart(8, " ")} ${this.currentTLE.MEAN_ANOMALY.toFixed(
-				4
-			).padStart(8, " ")} ${this.currentTLE.MEAN_MOTION.toFixed(
-				8
-			).padStart(11, " ")}${String(this.currentTLE.REV_AT_EPOCH).padStart(
-				5,
-				"0"
-			)}0`;
-
-			console.log("StationTracker: Generated TLE lines:");
-			console.log("TLE1:", tle1);
-			console.log("TLE2:", tle2);
-
-			this.satrec = satellite.twoline2satrec(tle1, tle2);
-			console.log("StationTracker: Created satrec:", this.satrec);
-
-			// 验证satrec是否有效
-			if (this.satrec && this.satrec.error === 0) {
-				console.log(
-					"StationTracker: Satrec is valid, error code:",
-					this.satrec.error
-				);
-				// 测试一次轨道传播
-				const testTime = new Date();
-				const testResult = satellite.propagate(this.satrec, testTime);
-				console.log(
-					"StationTracker: Test propagation result:",
-					testResult
-				);
-			} else {
-				console.error(
-					"StationTracker: Satrec creation failed, error code:",
-					this.satrec?.error
-				);
-				// 如果生成的TLE失败，尝试使用备用数据
-				this.useFallbackData();
-				return;
-			}
-
-			this.updateDisplay();
-			this.updateTleTime(Date.now());
-			this.updateStatus(
-				`${this.currentConfig.name} - 数据获取成功`,
-				"online"
-			);
-			this.startBackgroundUpdates();
-		} catch (error) {
-			console.error("网络请求失败:", error);
-			throw error;
 		}
-	}
 
-	private formatEpochFromJson(epochStr: string): string {
-		const date = new Date(epochStr);
-		const year = date.getUTCFullYear().toString().slice(-2);
+		if (!data || data.length === 0) {
+			throw lastError || new Error("所有API端点都无法获取TLE数据");
+		}
 
-		// 计算年内第几天
-		const start = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-		const dayOfYear =
-			Math.floor((date.getTime() - start.getTime()) / 86400000) + 1;
+		this.currentTLE = data[0];
 
-		// 计算日内的分数部分
-		const fraction =
-			(date.getUTCHours() * 3600 +
-				date.getUTCMinutes() * 60 +
-				date.getUTCSeconds() +
-				date.getUTCMilliseconds() / 1000) /
-			86400;
+		// 保存到缓存
+		await this.saveToCache(this.currentTLE);
 
-		const epochDay = dayOfYear + fraction;
-		return `${year}${epochDay.toFixed(8).padStart(12, "0")}`;
-	}
+		// 使用satellite.js创建卫星记录
+		this.satrec = (satellite as any).json2satrec(this.currentTLE);
 
-	private formatBstarFromJson(bstar: number): string {
-		if (bstar === 0) return "00000-0";
-		const exp = Math.floor(Math.log10(Math.abs(bstar)));
-		const mantissa = Math.floor(bstar * Math.pow(10, -exp + 4));
-		return `${Math.abs(mantissa).toString().padStart(5, "0")}${
-			exp >= 0 ? "+" : ""
-		}${exp}`;
+		this.updateDisplay();
+		this.updateTleTime(Date.now(), "网络");
+		this.updateStatus(`${this.currentConfig.name} - 数据已更新`, "online");
+
+		// 数据获取完成后自动启动功能
+		this.startBackgroundUpdates();
 	}
 
 	private useFallbackData(): void {
 		console.log("使用备用TLE数据");
 
-		// 根据空间站类型使用不同的已知有效TLE行
-		let knownValidTLE1: string;
-		let knownValidTLE2: string;
+		try {
+			this.currentTLE = this.currentConfig.fallbackTLE;
+			this.satrec = (satellite as any).json2satrec(this.currentTLE);
+			this.updateDisplay();
 
-		if (this.stationType === "css") {
-			// 天宫空间站的已知有效TLE
-			knownValidTLE1 =
-				"1 48274U 21035A   25165.10650463  .00018506  00000-0  23814-3 0  9990";
-			knownValidTLE2 =
-				"2 48274  41.4650  57.5570 0004208  54.3679 305.7550 15.58613121235207";
-		} else {
-			// 国际空间站的已知有效TLE
-			knownValidTLE1 =
-				"1 25544U 98067A   25165.12345678  .00002182  00000-0  21906-4 0  9995";
-			knownValidTLE2 =
-				"2 25544  51.6400 123.4567 0005500 234.5678 345.6789 15.49112426123456";
-		}
+			// 使用TLE中的EPOCH作为备用数据的时间
+			const epochTime = new Date(
+				this.currentConfig.fallbackTLE.EPOCH
+			).getTime();
+			this.updateTleTime(epochTime, "备用");
 
-		console.log(
-			`StationTracker: Using known valid TLE lines for ${this.stationType}:`
-		);
-		console.log("TLE1:", knownValidTLE1);
-		console.log("TLE2:", knownValidTLE2);
-
-		this.satrec = satellite.twoline2satrec(knownValidTLE1, knownValidTLE2);
-		console.log(
-			"StationTracker: Created satrec with known TLE:",
-			this.satrec
-		);
-
-		// 验证satrec是否有效
-		if (this.satrec && this.satrec.error === 0) {
-			console.log(
-				"StationTracker: Satrec is valid, error code:",
-				this.satrec.error
+			// 计算数据年龄
+			const dataAge = Math.floor(
+				(Date.now() - epochTime) / (1000 * 60 * 60 * 24)
 			);
-			// 测试一次轨道传播
-			const testTime = new Date();
-			const testResult = satellite.propagate(this.satrec, testTime);
-			console.log("StationTracker: Test propagation result:", testResult);
-		} else {
-			console.error(
-				"StationTracker: Satrec creation failed, error code:",
-				this.satrec?.error
+			this.updateStatus(
+				`${this.currentConfig.name} - 使用备用数据 (${dataAge}天前)`,
+				"online"
 			);
+
+			// 即使使用备用数据也启动自动功能
+			this.startBackgroundUpdates();
+		} catch (error) {
+			console.error("备用数据也失败:", error);
+			this.updateStatus("无法获取任何数据", "error");
 		}
-
-		// 使用对应的配置创建TLE数据对象
-		this.currentTLE = this.currentConfig.fallbackTLE;
-
-		this.updateDisplay();
-		this.updateTleTime(Date.now());
-		this.updateStatus(`${this.currentConfig.name} - 使用备用数据`, "error");
-		this.startBackgroundUpdates();
-	}
-
-	private generateTLE1(tleData: TLEData): string {
-		const satNum = String(tleData.NORAD_CAT_ID).padStart(5, "0");
-		const classification = tleData.CLASSIFICATION_TYPE || "U";
-		const intlDesignator = tleData.OBJECT_ID.padEnd(8, " ");
-		const epoch = this.formatEpochCorrect(tleData.EPOCH);
-		const meanMotionDot = this.formatScientific(tleData.MEAN_MOTION_DOT, 8);
-		const meanMotionDDot = this.formatScientific(
-			tleData.MEAN_MOTION_DDOT,
-			8
-		);
-		const bstar = this.formatScientific(tleData.BSTAR, 8);
-		const ephemerisType = tleData.EPHEMERIS_TYPE || 0;
-		const elementSetNum = String(tleData.ELEMENT_SET_NO || 999).padStart(
-			4,
-			"0"
-		);
-
-		return `1 ${satNum}${classification} ${intlDesignator} ${epoch} ${meanMotionDot} ${meanMotionDDot} ${bstar} ${ephemerisType} ${elementSetNum}0`;
-	}
-
-	private generateTLE2(tleData: TLEData): string {
-		const satNum = String(tleData.NORAD_CAT_ID).padStart(5, "0");
-		const inclination = tleData.INCLINATION.toFixed(4).padStart(8, " ");
-		const raan = tleData.RA_OF_ASC_NODE.toFixed(4).padStart(8, " ");
-		const eccentricity = Math.floor(tleData.ECCENTRICITY * 10000000)
-			.toString()
-			.padStart(7, "0");
-		const argPerigee = tleData.ARG_OF_PERICENTER.toFixed(4).padStart(
-			8,
-			" "
-		);
-		const meanAnomaly = tleData.MEAN_ANOMALY.toFixed(4).padStart(8, " ");
-		const meanMotion = tleData.MEAN_MOTION.toFixed(8).padStart(11, " ");
-		const revNum = String(tleData.REV_AT_EPOCH).padStart(5, "0");
-
-		return `2 ${satNum} ${inclination} ${raan} ${eccentricity} ${argPerigee} ${meanAnomaly} ${meanMotion}${revNum}0`;
-	}
-
-	private formatEpochCorrect(epochStr: string): string {
-		const date = new Date(epochStr);
-		const year = date.getFullYear().toString().slice(-2);
-
-		// 计算年内第几天
-		const start = new Date(date.getFullYear(), 0, 1);
-		const dayOfYear =
-			Math.floor((date.getTime() - start.getTime()) / 86400000) + 1;
-
-		// 计算日内的分数部分
-		const fraction =
-			(date.getHours() * 3600 +
-				date.getMinutes() * 60 +
-				date.getSeconds() +
-				date.getMilliseconds() / 1000) /
-			86400;
-
-		const epochDay = dayOfYear + fraction;
-		return `${year}${epochDay.toFixed(8).padStart(12, "0")}`;
-	}
-
-	private formatScientific(num: number, width: number): string {
-		if (num === 0) return " 00000-0";
-
-		const absNum = Math.abs(num);
-		const exponent = Math.floor(Math.log10(absNum));
-		const mantissa = absNum / Math.pow(10, exponent);
-		const mantissaInt = Math.floor(mantissa * 100000);
-
-		const sign = num >= 0 ? " " : "-";
-		const expSign = exponent >= 0 ? "+" : "";
-
-		return `${sign}${mantissaInt
-			.toString()
-			.padStart(5, "0")}${expSign}${exponent}`;
 	}
 
 	private updateDisplay(): void {
 		if (!this.satrec || !this.currentTLE) {
-			console.error("StationTracker: No satrec or TLE data available");
-			return;
-		}
-
-		// 检查satrec的错误状态
-		if (this.satrec.error !== 0) {
-			console.error(
-				"StationTracker: Satrec has error code:",
-				this.satrec.error
-			);
+			console.error("没有可用的卫星数据");
 			return;
 		}
 
 		const now = new Date();
-		console.log("StationTracker: Propagating for time:", now);
 
+		// 使用satellite.js进行轨道传播 - v6.0.0返回null而不是false
 		const positionAndVelocity = satellite.propagate(this.satrec, now);
-		console.log("StationTracker: Propagation result:", positionAndVelocity);
 
-		if (
-			positionAndVelocity.position &&
-			isValidPosition(positionAndVelocity.position)
-		) {
-			const gmst = satellite.gstime(now);
-			const geodeticCoords = satellite.eciToGeodetic(
-				positionAndVelocity.position,
-				gmst
+		if (positionAndVelocity === null) {
+			console.error("轨道传播失败");
+			this.updateStatus("轨道计算失败", "error");
+			return;
+		}
+
+		// 获取格林威治恒星时
+		const gmst = satellite.gstime(now);
+
+		// 转换到地理坐标 - 使用类型断言处理v6.0.0的position类型
+		const positionGd = satellite.eciToGeodetic(
+			positionAndVelocity.position as any,
+			gmst
+		);
+
+		// 计算速度大小
+		const velocity = positionAndVelocity.velocity;
+		let speed = 0;
+		if (velocity && typeof velocity === "object") {
+			speed = Math.sqrt(
+				velocity.x * velocity.x +
+					velocity.y * velocity.y +
+					velocity.z * velocity.z
 			);
+		}
 
-			const longitude = radiansToDegrees(geodeticCoords.longitude);
-			const latitude = radiansToDegrees(geodeticCoords.latitude);
-			const altitude = geodeticCoords.height;
+		// 将弧度转换为度数并标准化经度
+		let longitude = positionGd.longitude * (180 / Math.PI);
+		const latitude = positionGd.latitude * (180 / Math.PI);
 
-			let velocity = 0;
-			if (
-				positionAndVelocity.velocity &&
-				isValidVelocity(positionAndVelocity.velocity)
-			) {
-				const vel = positionAndVelocity.velocity;
-				velocity = Math.sqrt(
-					vel.x * vel.x + vel.y * vel.y + vel.z * vel.z
-				);
-			}
+		// 标准化经度到 -180 到 180 范围
+		longitude = ((((longitude + 180) % 360) + 360) % 360) - 180;
 
-			const utcTime = now.toISOString().slice(0, 19).replace("T", " ");
-			const localTime = now.toLocaleString("zh-CN");
+		// 计算轨道参数
+		const period = (24 * 60) / this.currentTLE.MEAN_MOTION;
 
-			// 计算轨道参数
-			const period = (24 * 60) / this.currentTLE.MEAN_MOTION;
+		const utcTime = now.toISOString().slice(0, 19).replace("T", " ");
+		const localTime = now.toLocaleString("zh-CN");
 
-			const data: StationData = {
-				longitude: longitude.toFixed(4),
-				latitude: latitude.toFixed(4),
-				altitude: altitude.toFixed(2),
-				velocity: velocity.toFixed(3),
-				utcTime,
-				localTime,
-				period: period.toFixed(2),
-				inclination: this.currentTLE.INCLINATION.toFixed(4),
-				eccentricity: this.currentTLE.ECCENTRICITY.toFixed(7),
-				tleUpdateTime: this.tleTimestamp
-					? new Date(this.tleTimestamp).toLocaleString("zh-CN")
-					: "--",
-			};
+		const data: StationData = {
+			longitude: longitude.toFixed(4),
+			latitude: latitude.toFixed(4),
+			altitude: positionGd.height.toFixed(2),
+			velocity: speed.toFixed(3),
+			utcTime,
+			localTime,
+			period: period.toFixed(2),
+			inclination: this.currentTLE.INCLINATION.toFixed(4),
+			eccentricity: this.currentTLE.ECCENTRICITY.toFixed(7),
+			tleUpdateTime: this.tleTimestamp
+				? new Date(this.tleTimestamp).toLocaleString("zh-CN")
+				: "--",
+		};
 
-			if (this.onDataUpdate) {
-				this.onDataUpdate(data);
-			}
-		} else {
-			console.error(
-				"StationTracker: Invalid position from propagation:",
-				positionAndVelocity
-			);
-			console.error("StationTracker: Satrec state:", this.satrec);
-
-			// 如果传播失败，尝试重新初始化备用数据
-			if (this.satrec.error !== 0) {
-				console.log(
-					"StationTracker: Attempting to reinitialize with fallback data"
-				);
-				this.useFallbackData();
-			}
+		if (this.onDataUpdate) {
+			this.onDataUpdate(data);
 		}
 	}
 
 	public updateOrbitPath(orbitPolyline: LeafletPolyline): void {
-		if (!this.satrec || !orbitPolyline) return;
+		if (!this.satrec || !orbitPolyline) {
+			console.log("updateOrbitPath: 地图或卫星数据未准备好");
+			return;
+		}
 
-		const points: OrbitPoint[] = [];
+		console.log("开始更新轨道路径...");
+
+		// 计算轨道路径（未来90分钟的轨迹）
+		const orbitPoints: OrbitPoint[] = [];
 		const now = new Date();
 
-		// 计算未来90分钟的轨道点
-		for (let i = 0; i < 90; i += 2) {
-			const futureTime = new Date(now.getTime() + i * 60 * 1000);
+		// 每2分钟计算一个点，总共45个点（90分钟）
+		for (let i = 0; i <= 45; i++) {
+			const futureTime = new Date(now.getTime() + i * 2 * 60 * 1000);
 			const positionAndVelocity = satellite.propagate(
 				this.satrec,
 				futureTime
 			);
 
-			if (
-				positionAndVelocity.position &&
-				isValidPosition(positionAndVelocity.position)
-			) {
-				const gmst = satellite.gstime(futureTime);
-				const geodeticCoords = satellite.eciToGeodetic(
-					positionAndVelocity.position,
-					gmst
+			// v6.0.0中propagate返回null而不是false
+			if (positionAndVelocity !== null && positionAndVelocity.position) {
+				const gmstFuture = satellite.gstime(futureTime);
+				const positionGd = satellite.eciToGeodetic(
+					positionAndVelocity.position as any,
+					gmstFuture
 				);
+				let longitude = positionGd.longitude * (180 / Math.PI);
+				const latitude = positionGd.latitude * (180 / Math.PI);
 
-				const longitude = radiansToDegrees(geodeticCoords.longitude);
-				const latitude = radiansToDegrees(geodeticCoords.latitude);
+				// 标准化经度到 -180 到 180 范围
+				longitude = ((((longitude + 180) % 360) + 360) % 360) - 180;
 
-				points.push([latitude, longitude]);
+				orbitPoints.push([latitude, longitude]);
 			}
 		}
 
-		// 处理跨越国际日期线的情况
-		const splitPoints = this.splitOrbitAtDateline(points);
-		orbitPolyline.setLatLngs(splitPoints);
+		console.log(`计算得到${orbitPoints.length}个轨道点`);
+
+		// 检测并分割跨越国际日期线的轨道段
+		const orbitSegments = this.splitOrbitAtDateline(orbitPoints);
+		console.log(`轨道被分割为${orbitSegments.length}段`);
+
+		// 更新轨道路径
+		orbitPolyline.setLatLngs(orbitSegments);
 	}
 
+	// 分割跨越国际日期线的轨道点
 	private splitOrbitAtDateline(points: OrbitPoint[]): OrbitSegment[] {
+		if (points.length === 0) return [];
+
 		const segments: OrbitSegment[] = [];
-		let currentSegment: OrbitPoint[] = [];
+		let currentSegment: OrbitPoint[] = [points[0]];
 
-		for (let i = 0; i < points.length; i++) {
-			const point = points[i];
+		for (let i = 1; i < points.length; i++) {
+			const prevLon = points[i - 1][1];
+			const currLon = points[i][1];
 
-			if (i > 0) {
-				const prevPoint = points[i - 1];
-				const lonDiff = Math.abs(point[1] - prevPoint[1]);
+			// 检测是否跨越国际日期线（经度差超过180度）
+			const lonDiff = Math.abs(currLon - prevLon);
 
-				if (lonDiff > 180) {
-					if (currentSegment.length > 0) {
-						segments.push([...currentSegment]);
-					}
-					currentSegment = [point];
-				} else {
-					currentSegment.push(point);
-				}
+			if (lonDiff > 180) {
+				// 跨越日期线，结束当前段，开始新段
+				segments.push(currentSegment);
+				currentSegment = [points[i]];
 			} else {
-				currentSegment.push(point);
+				// 正常情况，添加到当前段
+				currentSegment.push(points[i]);
 			}
 		}
 
+		// 添加最后一段
 		if (currentSegment.length > 0) {
 			segments.push(currentSegment);
 		}
@@ -624,24 +454,29 @@ export class StationTracker {
 	}
 
 	private startBackgroundUpdates(): void {
-		this.stopBackgroundUpdates();
+		// 避免重复启动
+		if (this.autoUpdateInterval) {
+			return;
+		}
 
-		// 每秒更新显示
+		console.log("启动后台自动更新功能");
+
+		// 每1秒更新一次位置（基于已有TLE数据的本地计算）
 		this.autoUpdateInterval = setInterval(() => {
-			this.updateDisplay();
+			if (this.satrec) {
+				this.updateDisplay();
+			}
 		}, 1000);
 
-		// 每5分钟更新TLE时间显示
+		// 每6小时检查并更新TLE数据（只有当缓存过期时才会真正发起网络请求）
+		this.tleUpdateInterval = setInterval(() => {
+			this.initialize();
+		}, this.cacheExpiryTime); // 6小时
+
+		// 每分钟更新一次TLE时间显示
 		this.timeDisplayInterval = setInterval(() => {
 			this.refreshTleTimeDisplay();
-		}, 5 * 60 * 1000);
-
-		// 每小时检查TLE更新
-		this.tleUpdateInterval = setInterval(() => {
-			this.fetchFromNetwork().catch(() => {
-				console.log("定期TLE更新失败，继续使用当前数据");
-			});
-		}, 60 * 60 * 1000);
+		}, 60000); // 1分钟
 	}
 
 	private stopBackgroundUpdates(): void {
@@ -649,27 +484,31 @@ export class StationTracker {
 			clearInterval(this.autoUpdateInterval);
 			this.autoUpdateInterval = null;
 		}
+
 		if (this.tleUpdateInterval) {
 			clearInterval(this.tleUpdateInterval);
 			this.tleUpdateInterval = null;
 		}
+
 		if (this.timeDisplayInterval) {
 			clearInterval(this.timeDisplayInterval);
 			this.timeDisplayInterval = null;
 		}
 	}
 
+	// 强制刷新：跳过缓存，直接从网络获取最新数据
 	public async forceRefresh(): Promise<void> {
-		this.updateStatus("强制刷新中...", "loading");
 		try {
+			this.updateStatus("强制刷新中...", "loading");
 			await this.fetchFromNetwork();
 		} catch (error) {
 			console.error("强制刷新失败:", error);
-			this.updateStatus("刷新失败", "error");
+			this.updateStatus("刷新失败，使用备用数据", "error");
+			this.useFallbackData();
 		}
 	}
 
-	private updateTleTime(timestamp: number): void {
+	private updateTleTime(timestamp: number, _source: string): void {
 		this.tleTimestamp = timestamp;
 		this.refreshTleTimeDisplay();
 	}
@@ -683,5 +522,13 @@ export class StationTracker {
 
 	public cleanup(): void {
 		this.stopBackgroundUpdates();
+	}
+
+	public setStationType(stationType: StationType): void {
+		if (this.stationType !== stationType) {
+			this.stationType = stationType;
+			this.cleanup();
+			this.initialize();
+		}
 	}
 }
