@@ -340,7 +340,7 @@ export class StationTracker {
 		let longitude = positionGd.longitude * (180 / Math.PI);
 		const latitude = positionGd.latitude * (180 / Math.PI);
 
-		// 标准化经度到 -180 到 180 范围
+		// 标准化经度到 -180 到 180 范围（用于显示数据）
 		longitude = ((((longitude + 180) % 360) + 360) % 360) - 180;
 
 		// 计算轨道参数
@@ -377,13 +377,30 @@ export class StationTracker {
 
 		console.log("开始更新轨道路径...");
 
-		// 计算轨道路径（未来90分钟的轨迹）
+		// 计算轨道路径（从当前时间开始，未来90分钟的轨迹）
 		const orbitPoints: OrbitPoint[] = [];
 		const now = new Date();
+		let previousLongitude: number | null = null;
+		let longitudeOffset = 0;
 
-		// 每2分钟计算一个点，总共45个点（90分钟）
-		for (let i = 0; i <= 45; i++) {
-			const futureTime = new Date(now.getTime() + i * 2 * 60 * 1000);
+		// 首先获取当前位置作为起点
+		const currentPosition = satellite.propagate(this.satrec, now);
+		if (currentPosition !== null && currentPosition.position) {
+			const currentGmst = satellite.gstime(now);
+			const currentPosGd = satellite.eciToGeodetic(
+				currentPosition.position as any,
+				currentGmst
+			);
+			const currentLng = currentPosGd.longitude * (180 / Math.PI);
+			const currentLat = currentPosGd.latitude * (180 / Math.PI);
+
+			orbitPoints.push([currentLat, currentLng]);
+			previousLongitude = currentLng;
+		}
+
+		// 每1分钟计算一个点，总共90个点（90分钟）- 提高精度
+		for (let i = 1; i <= 90; i++) {
+			const futureTime = new Date(now.getTime() + i * 60 * 1000); // 1分钟间隔
 			const positionAndVelocity = satellite.propagate(
 				this.satrec,
 				futureTime
@@ -399,23 +416,32 @@ export class StationTracker {
 				let longitude = positionGd.longitude * (180 / Math.PI);
 				const latitude = positionGd.latitude * (180 / Math.PI);
 
-				// 标准化经度到 -180 到 180 范围
-				longitude = ((((longitude + 180) % 360) + 360) % 360) - 180;
+				// 处理跨日期线的连续性
+				if (previousLongitude !== null) {
+					const lonDiff = longitude - previousLongitude;
 
-				orbitPoints.push([latitude, longitude]);
+					// 如果经度差超过180度，说明跨越了日期线
+					if (lonDiff > 180) {
+						longitudeOffset -= 360;
+					} else if (lonDiff < -180) {
+						longitudeOffset += 360;
+					}
+				}
+
+				// 应用偏移量以保持连续性
+				const continuousLongitude = longitude + longitudeOffset;
+				previousLongitude = longitude;
+
+				orbitPoints.push([latitude, continuousLongitude]);
 			}
 		}
 
 		console.log(`计算得到${orbitPoints.length}个轨道点`);
 
-		// 检测并分割跨越国际日期线的轨道段
-		const orbitSegments = this.splitOrbitAtDateline(orbitPoints);
-		console.log(`轨道被分割为${orbitSegments.length}段`);
+		// 直接使用轨道点，保持连续性
+		orbitPolyline.setLatLngs(orbitPoints);
 
-		// 更新轨道路径
-		orbitPolyline.setLatLngs(orbitSegments);
-
-		// 存储轨道点用于获取终点
+		// 存储轨道点用于获取终点（保持与轨道路径相同的连续经度）
 		this.lastOrbitPoints = orbitPoints;
 	}
 
@@ -427,38 +453,6 @@ export class StationTracker {
 
 		// 返回最后一个点
 		return this.lastOrbitPoints[this.lastOrbitPoints.length - 1];
-	}
-
-	// 分割跨越国际日期线的轨道点
-	private splitOrbitAtDateline(points: OrbitPoint[]): OrbitSegment[] {
-		if (points.length === 0) return [];
-
-		const segments: OrbitSegment[] = [];
-		let currentSegment: OrbitPoint[] = [points[0]];
-
-		for (let i = 1; i < points.length; i++) {
-			const prevLon = points[i - 1][1];
-			const currLon = points[i][1];
-
-			// 检测是否跨越国际日期线（经度差超过180度）
-			const lonDiff = Math.abs(currLon - prevLon);
-
-			if (lonDiff > 180) {
-				// 跨越日期线，结束当前段，开始新段
-				segments.push(currentSegment);
-				currentSegment = [points[i]];
-			} else {
-				// 正常情况，添加到当前段
-				currentSegment.push(points[i]);
-			}
-		}
-
-		// 添加最后一段
-		if (currentSegment.length > 0) {
-			segments.push(currentSegment);
-		}
-
-		return segments;
 	}
 
 	private updateStatus(message: string, type: Status["type"] = ""): void {

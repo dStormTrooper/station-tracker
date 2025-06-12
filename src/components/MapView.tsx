@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import * as satellite from "satellite.js";
 import type { MapViewProps } from "../types";
@@ -9,20 +9,86 @@ const MapView: React.FC<MapViewProps> = ({ data, tracker }) => {
 	const satelliteMarkerRef = useRef<L.Marker | null>(null);
 	const orbitPathRef = useRef<L.Polyline | null>(null);
 	const orbitEndMarkerRef = useRef<L.Marker | null>(null);
+	const [isTracking, setIsTracking] = useState(true); // 默认启用跟踪模式
+	const chineseLayerRef = useRef<L.TileLayer | null>(null);
+	const osmLayerRef = useRef<L.TileLayer | null>(null);
 
 	useEffect(() => {
 		if (!mapInstanceRef.current && mapRef.current) {
-			// 初始化地图
+			// 初始化地图 - 启用循环地图，优化轨道显示
 			mapInstanceRef.current = L.map(mapRef.current, {
-				worldCopyJump: true,
-			}).setView([0, 0], 2);
+				worldCopyJump: true, // 启用跨越日期线的平滑跳转
+				maxBounds: undefined, // 移除边界限制
+				maxBoundsViscosity: 0, // 边界粘性为0
+			}).setView([0, 0], 3); // 调整初始缩放级别为3，更适合轨道显示
 
-			// 添加地图图层
-			L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-				attribution: "© OpenStreetMap contributors",
-				maxZoom: 18,
-				noWrap: true,
-			}).addTo(mapInstanceRef.current);
+			// 创建高德中文地图图层（低缩放级别使用）
+			chineseLayerRef.current = L.tileLayer(
+				"https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}",
+				{
+					attribution: "© 高德地图",
+					maxZoom: 11, // 限制最大缩放级别
+					noWrap: false,
+					subdomains: ["1", "2", "3", "4"],
+				}
+			);
+
+			// 创建OSM图层（高缩放级别使用）
+			osmLayerRef.current = L.tileLayer(
+				"https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+				{
+					attribution: "© OpenStreetMap contributors",
+					maxZoom: 18,
+					noWrap: false,
+				}
+			);
+
+			// 根据初始缩放级别添加合适的图层
+			const initialZoom = mapInstanceRef.current.getZoom();
+			if (initialZoom >= 3 && initialZoom <= 8) {
+				chineseLayerRef.current.addTo(mapInstanceRef.current);
+			} else {
+				osmLayerRef.current.addTo(mapInstanceRef.current);
+			}
+
+			// 监听缩放事件，动态切换图层
+			mapInstanceRef.current.on("zoomend", () => {
+				if (
+					mapInstanceRef.current &&
+					chineseLayerRef.current &&
+					osmLayerRef.current
+				) {
+					const currentZoom = mapInstanceRef.current.getZoom();
+
+					if (currentZoom >= 3 && currentZoom <= 8) {
+						// 中等缩放级别（3-8级），使用中文地图
+						if (
+							mapInstanceRef.current.hasLayer(osmLayerRef.current)
+						) {
+							mapInstanceRef.current.removeLayer(
+								osmLayerRef.current
+							);
+							mapInstanceRef.current.addLayer(
+								chineseLayerRef.current
+							);
+						}
+					} else {
+						// 极小缩放级别（1-2级）或高缩放级别（>10级），使用OSM
+						if (
+							mapInstanceRef.current.hasLayer(
+								chineseLayerRef.current
+							)
+						) {
+							mapInstanceRef.current.removeLayer(
+								chineseLayerRef.current
+							);
+							mapInstanceRef.current.addLayer(
+								osmLayerRef.current
+							);
+						}
+					}
+				}
+			});
 
 			// 创建空间站图标
 			const stationIcon = L.divIcon({
@@ -131,7 +197,7 @@ const MapView: React.FC<MapViewProps> = ({ data, tracker }) => {
 	}, []);
 
 	useEffect(() => {
-		// 更新空间站位置
+		// 更新空间站位置并根据跟踪模式调整地图视图
 		if (
 			satelliteMarkerRef.current &&
 			data.latitude !== "--" &&
@@ -142,15 +208,34 @@ const MapView: React.FC<MapViewProps> = ({ data, tracker }) => {
 
 			if (!isNaN(lat) && !isNaN(lng)) {
 				satelliteMarkerRef.current.setLatLng([lat, lng]);
-				if (mapInstanceRef.current) {
-					mapInstanceRef.current.setView(
-						[lat, lng],
-						mapInstanceRef.current.getZoom()
+
+				// 只在跟踪模式下自动调整地图位置
+				if (isTracking && mapInstanceRef.current) {
+					const map = mapInstanceRef.current;
+					const currentZoom = map.getZoom();
+
+					// 获取当前地图边界来计算经度跨度
+					const bounds = map.getBounds();
+					const lonSpan = bounds.getEast() - bounds.getWest();
+
+					// 计算地图中心位置，使太空站出现在左侧1/6处
+					// 太空站在左侧1/6，所以地图中心应该向右偏移1/3个跨度
+					const targetCenterLng = lng + lonSpan * 0.33;
+					const targetCenterLat = lat;
+
+					// 平滑移动到新的中心位置
+					map.setView(
+						[targetCenterLat, targetCenterLng],
+						currentZoom,
+						{
+							animate: true,
+							duration: 1.0, // 1秒的平滑动画
+						}
 					);
 				}
 			}
 		}
-	}, [data.latitude, data.longitude]);
+	}, [data.latitude, data.longitude, isTracking]);
 
 	// 添加单独的useEffect来计算轨道终点位置
 	useEffect(() => {
@@ -183,8 +268,82 @@ const MapView: React.FC<MapViewProps> = ({ data, tracker }) => {
 		}
 	}, [tracker, data]);
 
+	// 居中到太空站的函数
+	const centerOnStation = () => {
+		if (
+			mapInstanceRef.current &&
+			data.latitude !== "--" &&
+			data.longitude !== "--"
+		) {
+			const lat = parseFloat(data.latitude);
+			const lng = parseFloat(data.longitude);
+
+			if (!isNaN(lat) && !isNaN(lng)) {
+				const map = mapInstanceRef.current;
+				const currentZoom = map.getZoom();
+				const bounds = map.getBounds();
+				const lonSpan = bounds.getEast() - bounds.getWest();
+				const targetCenterLng = lng + lonSpan * 0.33;
+
+				map.setView([lat, targetCenterLng], currentZoom, {
+					animate: true,
+					duration: 1.0,
+				});
+			}
+		}
+	};
+
 	return (
 		<div className="h-full flex flex-col">
+			{/* 地图控制面板 */}
+			<div className="glass-panel p-3 mb-2 flex items-center justify-between">
+				<label className="flex items-center cursor-pointer text-sm group">
+					<div className="relative mr-3">
+						<input
+							type="checkbox"
+							checked={isTracking}
+							onChange={(e) => setIsTracking(e.target.checked)}
+							className="sr-only peer"
+						/>
+						<div className="w-5 h-5 border-2 border-white border-opacity-40 rounded-md bg-white bg-opacity-10 peer-checked:bg-blue-500 peer-checked:border-blue-500 transition-all duration-200 flex items-center justify-center">
+							<svg
+								className={`w-3 h-3 text-white transition-opacity duration-200 ${
+									isTracking ? "opacity-100" : "opacity-0"
+								}`}
+								fill="currentColor"
+								viewBox="0 0 20 20">
+								<path
+									fillRule="evenodd"
+									d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+									clipRule="evenodd"
+								/>
+							</svg>
+						</div>
+					</div>
+					<span className="text-white text-opacity-90 group-hover:text-opacity-100 transition-all duration-200">
+						自动跟踪太空站
+					</span>
+				</label>
+
+				{!isTracking && (
+					<button
+						onClick={centerOnStation}
+						className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-sm font-medium rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 flex items-center space-x-2">
+						<svg
+							className="w-4 h-4"
+							fill="currentColor"
+							viewBox="0 0 20 20">
+							<path
+								fillRule="evenodd"
+								d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
+								clipRule="evenodd"
+							/>
+						</svg>
+						<span>定位太空站</span>
+					</button>
+				)}
+			</div>
+
 			<div
 				ref={mapRef}
 				className="h-[350px] w-full rounded-xl border-2 border-white border-opacity-30 overflow-hidden mb-3"
