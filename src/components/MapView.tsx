@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import L from "leaflet";
+import * as satellite from "satellite.js";
 import type { MapViewProps } from "../types";
 
 const MapView: React.FC<MapViewProps> = ({ data, tracker }) => {
@@ -7,6 +8,7 @@ const MapView: React.FC<MapViewProps> = ({ data, tracker }) => {
 	const mapInstanceRef = useRef<L.Map | null>(null);
 	const satelliteMarkerRef = useRef<L.Marker | null>(null);
 	const orbitPathRef = useRef<L.Polyline | null>(null);
+	const orbitEndMarkerRef = useRef<L.Marker | null>(null);
 
 	useEffect(() => {
 		if (!mapInstanceRef.current && mapRef.current) {
@@ -30,9 +32,22 @@ const MapView: React.FC<MapViewProps> = ({ data, tracker }) => {
 				iconAnchor: [15, 15],
 			});
 
+			// 创建轨道终点图标
+			const orbitEndIcon = L.divIcon({
+				className: "orbit-end-marker",
+				html: '<div class="orbit-end-pin">📍<div class="orbit-end-tooltip">90分钟后</div></div>',
+				iconSize: [24, 24],
+				iconAnchor: [12, 24],
+			});
+
 			// 添加空间站标记
 			satelliteMarkerRef.current = L.marker([0, 0], {
 				icon: stationIcon,
+			}).addTo(mapInstanceRef.current);
+
+			// 添加轨道终点标记
+			orbitEndMarkerRef.current = L.marker([0, 0], {
+				icon: orbitEndIcon,
 			}).addTo(mapInstanceRef.current);
 
 			// 创建轨道路径
@@ -41,6 +56,70 @@ const MapView: React.FC<MapViewProps> = ({ data, tracker }) => {
 				weight: 3,
 				opacity: 0.8,
 			}).addTo(mapInstanceRef.current);
+
+			// 添加自定义CSS样式
+			const style = document.createElement("style");
+			style.textContent = `
+				.station-marker {
+					background: none;
+					border: none;
+					text-align: center;
+					font-size: 20px;
+					line-height: 30px;
+					filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.5));
+				}
+				
+				.orbit-end-marker {
+					background: none;
+					border: none;
+					text-align: center;
+				}
+				
+				.orbit-end-pin {
+					position: relative;
+					font-size: 18px;
+					filter: drop-shadow(1px 1px 3px rgba(0,0,0,0.6));
+					cursor: pointer;
+				}
+				
+				.orbit-end-tooltip {
+					position: absolute;
+					bottom: 25px;
+					left: 50%;
+					transform: translateX(-50%);
+					background: rgba(0,0,0,0.8);
+					color: white;
+					padding: 4px 8px;
+					border-radius: 4px;
+					font-size: 11px;
+					white-space: nowrap;
+					pointer-events: none;
+					z-index: 1000;
+					opacity: 0;
+					visibility: hidden;
+					transition: opacity 0.2s ease, visibility 0.2s ease;
+				}
+				
+				.orbit-end-pin:hover .orbit-end-tooltip {
+					opacity: 1;
+					visibility: visible;
+				}
+				
+				.orbit-end-tooltip::after {
+					content: '';
+					position: absolute;
+					top: 100%;
+					left: 50%;
+					transform: translateX(-50%);
+					border: 4px solid transparent;
+					border-top-color: rgba(0,0,0,0.8);
+				}
+			`;
+
+			if (!document.getElementById("orbit-marker-styles")) {
+				style.id = "orbit-marker-styles";
+				document.head.appendChild(style);
+			}
 		}
 
 		return () => {
@@ -72,6 +151,30 @@ const MapView: React.FC<MapViewProps> = ({ data, tracker }) => {
 			}
 		}
 	}, [data.latitude, data.longitude]);
+
+	// 添加单独的useEffect来计算轨道终点位置
+	useEffect(() => {
+		if (tracker && orbitEndMarkerRef.current) {
+			// 计算轨道终点位置的函数
+			const updateOrbitEndPosition = () => {
+				try {
+					// 获取轨道路径的终点
+					const endPoint = tracker.getOrbitEndPoint();
+					if (endPoint) {
+						const [latitude, longitude] = endPoint;
+						orbitEndMarkerRef.current?.setLatLng([
+							latitude,
+							longitude,
+						]);
+					}
+				} catch (error) {
+					console.error("计算轨道终点位置失败:", error);
+				}
+			};
+
+			updateOrbitEndPosition();
+		}
+	}, [tracker, data]); // 当轨道数据更新时重新计算
 
 	useEffect(() => {
 		// 更新轨道路径

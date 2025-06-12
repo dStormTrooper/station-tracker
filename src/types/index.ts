@@ -118,5 +118,6 @@ export interface StationTracker {
 	initialize(): Promise<void>;
 	forceRefresh(): Promise<void>;
 	updateOrbitPath(orbitPolyline: LeafletPolyline): void;
+	getOrbitEndPoint(): OrbitPoint | null;
 	cleanup(): void;
 }

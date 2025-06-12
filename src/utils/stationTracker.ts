@@ -35,6 +35,7 @@ export class StationTracker {
 	private readonly cacheExpiryTime: number = 6 * 60 * 60 * 1000; // 6小时
 	private tleTimestamp: number | null = null;
 	private timeDisplayInterval: NodeJS.Timeout | null = null;
+	private lastOrbitPoints: OrbitPoint[] = [];
 
 	// 空间站配置
 	private readonly stationConfig: StationConfigMap = {
@@ -413,6 +414,19 @@ export class StationTracker {
 
 		// 更新轨道路径
 		orbitPolyline.setLatLngs(orbitSegments);
+
+		// 存储轨道点用于获取终点
+		this.lastOrbitPoints = orbitPoints;
+	}
+
+	// 获取轨道路径的终点（90分钟后的位置）
+	public getOrbitEndPoint(): OrbitPoint | null {
+		if (!this.lastOrbitPoints || this.lastOrbitPoints.length === 0) {
+			return null;
+		}
+
+		// 返回最后一个点
+		return this.lastOrbitPoints[this.lastOrbitPoints.length - 1];
 	}
 
 	// 分割跨越国际日期线的轨道点
