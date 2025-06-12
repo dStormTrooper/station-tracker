@@ -104,13 +104,16 @@ class CSSTracker {
 	}
 
 	initializeMap() {
-		// 创建地图实例
-		this.map = L.map("map").setView([0, 0], 2);
+		// 创建地图实例，添加跨日期线跳转支持
+		this.map = L.map("map", {
+			worldCopyJump: true, // 允许跨越国际日期线的平滑跳转
+		}).setView([0, 0], 2);
 
-		// 添加地图图层 - 使用OpenStreetMap
+		// 添加地图图层 - 使用OpenStreetMap，防止瓦片重复
 		L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 			attribution: "© OpenStreetMap contributors",
 			maxZoom: 18,
+			noWrap: true, // 防止地图瓦片在经度±180°处重复显示
 		}).addTo(this.map);
 
 		// 创建空间站图标
@@ -394,9 +397,12 @@ class CSSTracker {
 				velocity.z * velocity.z
 		);
 
-		// 将弧度转换为度数
-		const longitude = positionGd.longitude * (180 / Math.PI);
+		// 将弧度转换为度数并标准化经度
+		let longitude = positionGd.longitude * (180 / Math.PI);
 		const latitude = positionGd.latitude * (180 / Math.PI);
+
+		// 标准化经度到 -180 到 180 范围
+		longitude = ((((longitude + 180) % 360) + 360) % 360) - 180;
 
 		// 更新数据视图
 		this.elements.longitude.textContent = longitude.toFixed(4);
@@ -462,8 +468,11 @@ class CSSTracker {
 					positionAndVelocity.position,
 					gmstFuture
 				);
-				const longitude = positionGd.longitude * (180 / Math.PI);
+				let longitude = positionGd.longitude * (180 / Math.PI);
 				const latitude = positionGd.latitude * (180 / Math.PI);
+
+				// 标准化经度到 -180 到 180 范围
+				longitude = ((((longitude + 180) % 360) + 360) % 360) - 180;
 
 				orbitPoints.push([latitude, longitude]);
 			}
