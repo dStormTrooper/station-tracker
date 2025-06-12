@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 自定义组件样式 */
+@layer components {
+	.station-marker {
+		@apply bg-transparent border-none text-center text-xl leading-8;
+		filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.5));
+	}
+
+	.glass-panel {
+		@apply bg-white bg-opacity-60 backdrop-blur-md rounded-xl border border-white border-opacity-30;
+	}
+
+	.gradient-bg {
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+	}
+}
