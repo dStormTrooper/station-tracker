@@ -20,6 +20,7 @@ const MapView: React.FC<MapViewProps> = ({ data, tracker }) => {
 				worldCopyJump: true, // 启用跨越日期线的平滑跳转
 				maxBounds: undefined, // 移除边界限制
 				maxBoundsViscosity: 0, // 边界粘性为0
+				zoomControl: false, // 禁用默认的缩放控件
 			}).setView([0, 0], 3); // 调整初始缩放级别为3，更适合轨道显示
 
 			// 创建高德中文地图图层（低缩放级别使用）
