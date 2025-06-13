@@ -101,7 +101,7 @@ const MapView: React.FC<MapViewProps> = ({ data, tracker }) => {
 			// 创建轨道终点图标
 			const orbitEndIcon = L.divIcon({
 				className: "orbit-end-marker",
-				html: '<div class="orbit-end-pin">📍<div class="orbit-end-tooltip">90分钟后</div></div>',
+				html: `<div class="orbit-end-pin">📍<div class="orbit-end-tooltip">90分钟后</div></div>`,
 				iconSize: [24, 24],
 				iconAnchor: [12, 24],
 			});

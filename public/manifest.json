@@ -1,8 +1,8 @@
 {
 	"manifest_version": 3,
-	"name": "天宫空间站位置监控器",
+	"name": "空间站位置监控器",
 	"version": "1.0",
-	"description": "实时监控中国天宫空间站的轨道位置",
+	"description": "实时监控中国天宫空间站与国际空间站的轨道位置",
 	"permissions": ["storage"],
 	"host_permissions": [
 		"https://celestrak.org/*",
