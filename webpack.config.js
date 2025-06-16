@@ -48,7 +48,7 @@ module.exports = {
 		new CopyWebpackPlugin({
 			patterns: [
 				{ from: "public/manifest.json", to: "manifest.json" },
-				{ from: "css-monitor-extension/icons", to: "icons" },
+				{ from: "icons", to: "icons" },
 				{
 					from: "node_modules/leaflet/dist/leaflet.css",
 					to: "leaflet.css",
