@@ -2,9 +2,13 @@ const path = require("path");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 
+const isMobile = process.env.BUILD_TARGET === "mobile";
+
 module.exports = {
 	entry: {
-		popup: "./src/popup.tsx",
+		[isMobile ? "index" : "popup"]: isMobile
+			? "./src/mobile.tsx"
+			: "./src/popup.tsx",
 	},
 	output: {
 		path: path.resolve(__dirname, "dist"),
@@ -41,15 +45,16 @@ module.exports = {
 	},
 	plugins: [
 		new HtmlWebpackPlugin({
-			template: "./public/popup.html",
-			filename: "popup.html",
-			chunks: ["popup"],
+			template: isMobile ? "./public/mobile.html" : "./public/popup.html",
+			filename: isMobile ? "index.html" : "popup.html",
+			chunks: [isMobile ? "index" : "popup"],
 		}),
 		new CopyWebpackPlugin({
 			patterns: [
-				{ from: "public/manifest.json", to: "manifest.json" },
+				...(isMobile
+					? []
+					: [{ from: "public/manifest.json", to: "manifest.json" }]),
 				{ from: "icons", to: "icons" },
-
 				{
 					from: "node_modules/leaflet/dist/leaflet.css",
 					to: "leaflet.css",

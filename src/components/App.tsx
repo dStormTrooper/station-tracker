@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Capacitor } from "@capacitor/core";
 import Header from "./Header";
 import StationSelector from "./StationSelector";
 import TabNavigation from "./TabNavigation";
@@ -36,6 +37,9 @@ const App: React.FC = () => {
 	});
 	const [tracker, setTracker] = useState<IStationTracker | null>(null);
 
+	// 检测是否为移动端环境
+	const isMobile = Capacitor.isNativePlatform();
+
 	useEffect(() => {
 		const stationTracker = new StationTracker(currentStation);
 		setTracker(stationTracker);
@@ -69,8 +73,13 @@ const App: React.FC = () => {
 		}
 	};
 
+	// 根据环境选择不同的容器样式
+	const containerClass = isMobile
+		? "w-full h-full gradient-bg"
+		: "w-[400px] h-[600px] gradient-bg";
+
 	return (
-		<div className="w-[400px] h-[600px] gradient-bg">
+		<div className={containerClass}>
 			<div className="glass-panel h-full p-5 flex flex-col shadow-xl">
 				<Header status={status} />
 

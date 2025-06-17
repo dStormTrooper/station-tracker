@@ -4,3 +4,8 @@ story.md
 part1.md
 part2.md
 css-monitor-extension
+
+# Capacitor
+android/
+ios/
+.capacitor/
